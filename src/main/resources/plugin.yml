@@ -1,0 +1,7 @@
+name: suljob
+version: '${project.version}'
+main: leettu.suljob.Suljob
+api-version: '1.20'
+commands: 
+  "게임시작":
+    description: nice

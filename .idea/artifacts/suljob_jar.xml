@@ -1,0 +1,8 @@
+<component name="ArtifactManager">
+  <artifact type="jar" name="suljob:jar">
+    <output-path>$PROJECT_DIR$/../../마크/서버/플러그인 서버/술잡/plugins</output-path>
+    <root id="archive" name="suljob.jar">
+      <element id="module-output" name="suljob" />
+    </root>
+  </artifact>
+</component>
