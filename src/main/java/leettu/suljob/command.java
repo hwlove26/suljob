@@ -32,8 +32,6 @@ public class command implements CommandExecutor, Listener {
                         String teamLeaveCommand = "team leave " + teamPlayer;
                         player.sendMessage(teamLeaveCommand);
                         Bukkit.dispatchCommand(Bukkit.getConsoleSender(), teamLeaveCommand);
-
-
                     }
 
 
