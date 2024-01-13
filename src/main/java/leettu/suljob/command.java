@@ -15,10 +15,14 @@ import java.util.List;
 import java.util.Random;
 
 public class command implements CommandExecutor, Listener {
+    @Override
+    public boolean onCommand(CommandSender commandSender, Command command, String s, String[] strings) {
+        return false;
+    }
 
 
 
-
+    /*
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         Player player = (Player) sender;
@@ -42,5 +46,7 @@ public class command implements CommandExecutor, Listener {
         }
         return false;
     }
+    /*
+     */
 
 }

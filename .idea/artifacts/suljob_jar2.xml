@@ -1,0 +1,8 @@
+<component name="ArtifactManager">
+  <artifact type="jar" name="suljob:jar2">
+    <output-path>$USER_HOME$/플긴 서버/plugins</output-path>
+    <root id="archive" name="suljob.jar">
+      <element id="module-output" name="suljob" />
+    </root>
+  </artifact>
+</component>
