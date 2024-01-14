@@ -30,6 +30,7 @@ import java.util.UUID;
 public final class Suljob extends JavaPlugin implements Listener,CommandExecutor, TabCompleter {
 
     private File configFile;
+    private boolean timestart;
     private FileConfiguration config;
     private  List<Player> onlinePlayer = new ArrayList<>();
     private List<Player> runner = new ArrayList<>();
@@ -39,18 +40,24 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
     private int time;
     private Location bossSpawn;
     private Location runnerSpawn;
+    private Location lobby;
     private int remainNum;
+    private int t;
+    private int tt;
     @Override
     public void onEnable() {
         getLogger().info("on0.1");
         getCommand("게임시작").setExecutor(this);
         getCommand("설정").setExecutor(this);
         getCommand("클");
+        getCommand("디버그");
         onlinePlayer.addAll(Bukkit.getOnlinePlayers());
         configFile = new File(getDataFolder(), "config.yml");
         config = YamlConfiguration.loadConfiguration(configFile);
         bossSpawn = config.getLocation("bossSpawn");
         runnerSpawn = config.getLocation("runnerSpawn");
+        lobby = config.getLocation("lobby");
+        time = config.getInt("time");
 
     }
     @Override
@@ -58,6 +65,8 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
         getLogger().info("술잡 오프");
         config.set("bossSpawn", bossSpawn);
         config.set("runnerSpawn", runnerSpawn);
+        config.set("lobby", lobby);
+        config.set("time", time);
         try {
             config.save(configFile);
         } catch (IOException e) {
@@ -156,7 +165,6 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
     public void slowness(Player player) {
         PotionEffect slow = new PotionEffect(PotionEffectType.SLOW, 999999 * 20, 10);
         player.addPotionEffect(slow);
-        player.sendMessage("slow");
     }
 
     public void darkness(Player player) {
@@ -183,9 +191,23 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         Player player = (Player) sender;
 
-        if (command.getName().equalsIgnoreCase("클")){
-            clearEffect(player);
+        if (command.getName().equalsIgnoreCase("디버그")) {
+            if (player.isOp()) {
+                if (args.length == 1) {
+                    if (args[0].equalsIgnoreCase("item")){
+                        giveToySword(player);
+                        givePhantomDance(player);
+                    }
+
+                } else if (args.length == 2) {
+                    if (args[0].equalsIgnoreCase("add")) {
+                        remainNum = remainNum + Integer.parseInt(args[1]);
+                    }
+                }
+
+            }
         }
+
         if (command.getName().equalsIgnoreCase("설정")){
             if (player.isOp()) {
                 if (args.length == 1) {
@@ -205,11 +227,21 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
                             e.printStackTrace();
                         }
                         player.sendMessage("플레이어 스폰이 " + runnerSpawn + "로 저장됨");
+                    } else if (args[0].equalsIgnoreCase("로비")) {
+                        lobby = player.getLocation();
+                        try {
+                            config.save(configFile);
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                        player.sendMessage("로비가 " + lobby + "로 저장됨");
                     }
                 }
-                else {
-                    player.sendMessage("술레위치");
-
+                else if(args.length == 2){
+                    if (args[0].equalsIgnoreCase("time")) {
+                        time = Integer.parseInt(args[1]);
+                        player.sendMessage("시간이 " + time + "초로 저장됨");
+                    }
                 }
             } else {
                 player.sendMessage("op가 아님");
@@ -232,7 +264,6 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
                     bossWin = false;
                     boss = null;
                     runner = null;
-                    time = 0;
                     getRandomPlayer();
                     boss = getRandom();
                     Bukkit.broadcastMessage("boss is " + boss.getName());
@@ -245,7 +276,7 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
                     boss.setMaxHealth(80);
                     heal(boss);
                     boss.teleport(bossSpawn);
-                    remainNum = 0;
+                    remainNum = 1;
                     for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
                         if (!boss.equals(onlinePlayer)) {
                             teamJoin(onlinePlayer, "player");
@@ -253,49 +284,71 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
                             onlinePlayer.teleport(runnerSpawn);
                             darkness(onlinePlayer);
                             heal(onlinePlayer);
-                            remainNum = remainNum ++;
+                            remainNum = remainNum + 1;
                             giveToySword(onlinePlayer);
                         }
                     }
-                    for (int i =10; i > 0; i--) {
-                        Bukkit.broadcastMessage(ChatColor.RED + "술레가 나올때까지: " + i);
-                        try {
-                            Thread.sleep(2000); // Wait for 20 ticks (1 second)
-                        } catch (InterruptedException e) {
-                            e.printStackTrace();
-                        }
-                    }
-                    Bukkit.broadcastMessage(runner + " 도망쳐!");
-                    Bukkit.broadcastMessage("남은 인원 : " + remainNum);
-                    clearEffect(boss);
-                    darkness(boss);
-                    for (int i = 0; i < 60; i++) {
-                        if (time == 60) {
-                            Bukkit.broadcastMessage(ChatColor.YELLOW + "시간이 60초 남았습니다");
-                        } else if (time <= 5 && time >= 1) {
-                            Bukkit.broadcastMessage(ChatColor.YELLOW + "시간이 " + time + "초 남았습니다");
-                        }
+                    t = 10;
+                    tt = time;
+                    timestart = false;
 
-                        // Check if escapeWinner variable is set to true
-                        if (bossWin) {
-                            Bukkit.broadcastMessage(ChatColor.GREEN + "술레가 승리함");
-                            break;
-                        }
+                    // Escape game loop
+                    Bukkit.getScheduler().runTaskTimer(this, () -> {
+                        if (t > 0) {
+                            Bukkit.broadcastMessage("술레가 나올때까지: " + t);
+                            t--;
+                        } else {
+                            Bukkit.broadcastMessage("탈출");
 
-                        // Check if no players are left
-                        if (Bukkit.getOnlinePlayers().size() == 0) {
-                            Bukkit.broadcastMessage(ChatColor.RED + "술레가 승리함");
-                            break;
-                        }
+                            // Start countdown loop
+                            Bukkit.getScheduler().runTaskTimer(this, () -> {
+                                if (tt == 60) {
+                                    Bukkit.broadcastMessage("시간이 60초 남았습니다");
+                                } else if (tt <= 5) {
+                                    Bukkit.broadcastMessage("시간이 " + tt + "초 남았습니다");
+                                }
 
-                        try {
-                            Thread.sleep(20000); // Wait for 20 ticks (1 second)
-                        } catch (InterruptedException e) {
-                            e.printStackTrace();
-                        }
+                                if (tt <= 0 || remainNum == 0) {
+                                    // Countdown completed or no players left, exit the loop
+                                    Bukkit.getScheduler().cancelTasks(this);
 
-                        time--;
-                    }
+                                    // Broadcast winner based on the escapeWin flag
+                                    if (bossWin) {
+                                        Bukkit.broadcastMessage("도망자가 승리함!");
+                                    } else {
+                                        Bukkit.broadcastMessage("술레가 승리함!");
+                                    }
+
+                                    // Execute additional commands after the game
+                                    Bukkit.getScheduler().runTaskLater(this, () -> {
+                                        Bukkit.broadcastMessage("Additional logic after escape game completion");
+
+                                        // Execute other commands as needed
+                                        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "attribute @a minecraft:generic.max_health base set 20");
+                                        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "clear @a");
+                                        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "team leave @a");
+
+                                        // Reset players
+                                        for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
+                                            onlinePlayer.setGameMode(GameMode.ADVENTURE);
+                                            onlinePlayer.teleport(lobby); // Change to your lobby location
+                                            clearEffect(onlinePlayer);
+                                            onlinePlayer.getInventory().clear();
+                                        }
+
+                                    }, 20L * 10); // 10 seconds delay after escape game completion
+                                }
+                                time--;
+
+                            }, 0L, 20L); // 20 ticks per second
+
+                            // Cancel the escape game task
+                            Bukkit.getScheduler().cancelTasks(this);
+                        }
+                    }, 0L, 20L);
+
+
+
 
                     return true;
 
@@ -305,7 +358,8 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
                 } else {
                 player.sendMessage("op가 아님");
                 }
-            } return false;
+            }
+        return false;
         }
 
 
@@ -318,6 +372,7 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
             if (args.length == 1) {
                 completions.add("술레위치");
                 completions.add("플레이어위치");
+                completions.add("로비");
             }
         }
         return  completions;
