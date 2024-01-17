@@ -292,61 +292,16 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
                     tt = time;
                     timestart = false;
 
-                    // Escape game loop
                     Bukkit.getScheduler().runTaskTimer(this, () -> {
-                        if (t > 0) {
-                            Bukkit.broadcastMessage("술레가 나올때까지: " + t);
-                            t--;
-                        } else {
-                            Bukkit.broadcastMessage("탈출");
-
-                            // Start countdown loop
-                            Bukkit.getScheduler().runTaskTimer(this, () -> {
-                                if (tt == 60) {
-                                    Bukkit.broadcastMessage("시간이 60초 남았습니다");
-                                } else if (tt <= 5) {
-                                    Bukkit.broadcastMessage("시간이 " + tt + "초 남았습니다");
-                                }
-
-                                if (tt <= 0 || remainNum == 0) {
-                                    // Countdown completed or no players left, exit the loop
-                                    Bukkit.getScheduler().cancelTasks(this);
-
-                                    // Broadcast winner based on the escapeWin flag
-                                    if (bossWin) {
-                                        Bukkit.broadcastMessage("도망자가 승리함!");
-                                    } else {
-                                        Bukkit.broadcastMessage("술레가 승리함!");
-                                    }
-
-                                    // Execute additional commands after the game
-                                    Bukkit.getScheduler().runTaskLater(this, () -> {
-                                        Bukkit.broadcastMessage("Additional logic after escape game completion");
-
-                                        // Execute other commands as needed
-                                        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "attribute @a minecraft:generic.max_health base set 20");
-                                        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "clear @a");
-                                        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "team leave @a");
-
-                                        // Reset players
-                                        for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
-                                            onlinePlayer.setGameMode(GameMode.ADVENTURE);
-                                            onlinePlayer.teleport(lobby); // Change to your lobby location
-                                            clearEffect(onlinePlayer);
-                                            onlinePlayer.getInventory().clear();
-                                        }
-
-                                    }, 20L * 10); // 10 seconds delay after escape game completion
-                                }
-                                time--;
-
-                            }, 0L, 20L); // 20 ticks per second
-
-                            // Cancel the escape game task
+                        if (t <= 0) {
                             Bukkit.getScheduler().cancelTasks(this);
                         }
-                    }, 0L, 20L);
-
+                        else {
+                            Bukkit.broadcastMessage("술레가 나오기까지 : " + t);
+                            t--;
+                        }
+                    },0L, 20L);
+                    Bukkit.broadcastMessage("1");
 
 
 
