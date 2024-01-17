@@ -5,10 +5,16 @@ import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeModifier;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.TabCompleter;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -19,6 +25,7 @@ import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.scheduler.BukkitScheduler;
 
 import java.io.File;
 import java.io.IOException;
@@ -30,16 +37,19 @@ import java.util.UUID;
 public final class Suljob extends JavaPlugin implements Listener,CommandExecutor, TabCompleter {
 
     private File configFile;
+    private boolean waitFinish;
     private boolean timestart;
+    private String bossName;
     private FileConfiguration config;
     private  List<Player> onlinePlayer = new ArrayList<>();
     private List<Player> runner = new ArrayList<>();
-    private Boolean bossWin;
+    private Boolean playerWin;
     private Player boss;
     private Player randomPlayer;
+    private Location randomLocation;
     private int time;
     private Location bossSpawn;
-    private Location runnerSpawn;
+    private List<Location> runnerSpawn = new ArrayList<>();
     private Location lobby;
     private int remainNum;
     private int t;
@@ -51,11 +61,13 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
         getCommand("설정").setExecutor(this);
         getCommand("클");
         getCommand("디버그");
+        getCommand("test");
+        getServer().getPluginManager().registerEvents(this,this);
         onlinePlayer.addAll(Bukkit.getOnlinePlayers());
         configFile = new File(getDataFolder(), "config.yml");
         config = YamlConfiguration.loadConfiguration(configFile);
         bossSpawn = config.getLocation("bossSpawn");
-        runnerSpawn = config.getLocation("runnerSpawn");
+        runnerSpawn = loadLocations("runnerSpawn");
         lobby = config.getLocation("lobby");
         time = config.getInt("time");
 
@@ -64,9 +76,9 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
     public void onDisable() {
         getLogger().info("술잡 오프");
         config.set("bossSpawn", bossSpawn);
-        config.set("runnerSpawn", runnerSpawn);
         config.set("lobby", lobby);
         config.set("time", time);
+        saveLocations("runnerSpawn", runnerSpawn);
         try {
             config.save(configFile);
         } catch (IOException e) {
@@ -74,7 +86,45 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
         }
     }
 
+    private void saveLocations(String path, List<Location> locations) {
+        FileConfiguration config = getConfig();
+        ConfigurationSection section = config.createSection(path);
 
+        for (int i = 0; i < locations.size(); i++) {
+            Location location = locations.get(i);
+            String key = "location" + i;
+
+            section.set(key + ".world", location.getWorld().getName());
+            section.set(key + ".x", location.getX());
+            section.set(key + ".y", location.getY());
+            section.set(key + ".z", location.getZ());
+            section.set(key + ".yaw", location.getYaw());
+            section.set(key + ".pitch", location.getPitch());
+        }
+
+        saveConfig();
+    }
+
+    private List<Location> loadLocations(String path) {
+        List<Location> locations = new ArrayList<>();
+        ConfigurationSection section = getConfig().getConfigurationSection(path);
+
+        if (section != null) {
+            for (String key : section.getKeys(false)) {
+                String worldName = section.getString(key + ".world");
+                double x = section.getDouble(key + ".x");
+                double y = section.getDouble(key + ".y");
+                double z = section.getDouble(key + ".z");
+                float yaw = (float) section.getDouble(key + ".yaw");
+                float pitch = (float) section.getDouble(key + ".pitch");
+
+                Location location = new Location(getServer().getWorld(worldName), x, y, z, yaw, pitch);
+                locations.add(location);
+            }
+        }
+
+        return locations;
+    }
     public void getRandomPlayer() {
         if (onlinePlayer.isEmpty()) {
             getLogger().warning("플레이어가 없음");
@@ -88,6 +138,16 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
 
     public Player getRandom(){
         return randomPlayer;
+    }
+
+    public void getRandomLocation() {
+        if (runnerSpawn.isEmpty()) {
+            getLogger().warning("no location saved");
+        }
+
+        Random random = new Random();
+        int randomIndex = random.nextInt(runnerSpawn.size());
+        randomLocation = runnerSpawn.get(randomIndex);
     }
 
     public void givePhantomDance(Player player) {
@@ -123,6 +183,83 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
 
 
             player.getInventory().addItem(itemStack);
+        }
+    }
+
+    private void openGUI(Player player) {
+        Inventory gui = Bukkit.createInventory(null, 9, "testGUI");
+        player.openInventory(gui);
+    }
+
+    private void openWeaponGUI(Player player) {
+        Inventory gui = Bukkit.createInventory(null, 9, "WeaponGUI");
+
+        ItemStack PhantomDance = new ItemStack(Material.NETHERITE_HOE);
+        ItemMeta itemMetaP = PhantomDance.getItemMeta();
+
+        if (itemMetaP != null) {
+            itemMetaP.setDisplayName(ChatColor.BLUE + "" + ChatColor.BOLD + "유령 무희" );
+            itemMetaP.setLore(java.util.Arrays.asList(ChatColor.DARK_RED + "이 영혼들을 너에게 바칠게"));
+            itemMetaP.setCustomModelData(5);
+            AttributeModifier damageModifier = new AttributeModifier(
+                    UUID.randomUUID(),
+                    "generic.attackDamage",
+                    5.0,
+                    AttributeModifier.Operation.ADD_NUMBER,
+                    EquipmentSlot.HAND
+            );
+            itemMetaP.addAttributeModifier(Attribute.GENERIC_ATTACK_DAMAGE, damageModifier);
+
+            AttributeModifier attackSpeedModifier = new AttributeModifier(
+                    UUID.randomUUID(),
+                    "generic.attack_speed",
+                    -3.0,
+                    AttributeModifier.Operation.ADD_NUMBER,
+                    EquipmentSlot.HAND
+            );
+            itemMetaP.addAttributeModifier(Attribute.GENERIC_ATTACK_SPEED, attackSpeedModifier);
+
+            itemMetaP.addItemFlags(ItemFlag.HIDE_ATTRIBUTES, ItemFlag.HIDE_ENCHANTS, ItemFlag.HIDE_UNBREAKABLE);
+
+            itemMetaP.setUnbreakable(true);
+            PhantomDance.setItemMeta(itemMetaP);
+
+            ItemStack itemStack = new ItemStack(Material.IRON_AXE);
+            ItemMeta itemMeta = itemStack.getItemMeta();
+
+            if (itemMeta != null) {
+                itemMeta.setDisplayName(ChatColor.RED + "" + ChatColor.BOLD + "철제 도끼" );
+                itemMeta.setLore(java.util.Arrays.asList(ChatColor.DARK_AQUA+ "" + ChatColor.BOLD + "이 서늘하고도 묵직한 감각.. 이거야...."));
+                itemMeta.setCustomModelData(5);
+                AttributeModifier damageModifierE = new AttributeModifier(
+                        UUID.randomUUID(),
+                        "generic.attackDamage",
+                        14,
+                        AttributeModifier.Operation.ADD_NUMBER,
+                        EquipmentSlot.HAND
+                );
+                itemMeta.addAttributeModifier(Attribute.GENERIC_ATTACK_DAMAGE, damageModifierE);
+
+                AttributeModifier attackSpeedModifierE = new AttributeModifier(
+                        UUID.randomUUID(),
+                        "generic.attack_speed",
+                        -3.8,
+                        AttributeModifier.Operation.ADD_NUMBER,
+                        EquipmentSlot.HAND
+                );
+                itemMeta.addAttributeModifier(Attribute.GENERIC_ATTACK_SPEED, attackSpeedModifierE);
+
+                itemMeta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES, ItemFlag.HIDE_ENCHANTS, ItemFlag.HIDE_UNBREAKABLE);
+
+                itemMeta.setUnbreakable(true);
+                itemStack.setItemMeta(itemMeta);
+
+            }
+
+            gui.setItem(5, PhantomDance);
+            gui.setItem(3, itemStack);
+
+            player.openInventory(gui);
         }
     }
 
@@ -162,6 +299,42 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
         }
     }
 
+    public void giveIronAxe(Player player) {
+        ItemStack itemStack = new ItemStack(Material.IRON_AXE);
+        ItemMeta itemMeta = itemStack.getItemMeta();
+
+        if (itemMeta != null) {
+            itemMeta.setDisplayName(ChatColor.RED + "" + ChatColor.BOLD + "철제 도끼" );
+            itemMeta.setLore(java.util.Arrays.asList(ChatColor.DARK_AQUA+ "" + ChatColor.BOLD + "이 서늘하고도 묵직한 감각.. 이거야...."));
+            itemMeta.setCustomModelData(5);
+            AttributeModifier damageModifier = new AttributeModifier(
+                    UUID.randomUUID(),
+                    "generic.attackDamage",
+                    14,
+                    AttributeModifier.Operation.ADD_NUMBER,
+                    EquipmentSlot.HAND
+            );
+            itemMeta.addAttributeModifier(Attribute.GENERIC_ATTACK_DAMAGE, damageModifier);
+
+            AttributeModifier attackSpeedModifier = new AttributeModifier(
+                    UUID.randomUUID(),
+                    "generic.attack_speed",
+                    -3.8,
+                    AttributeModifier.Operation.ADD_NUMBER,
+                    EquipmentSlot.HAND
+            );
+            itemMeta.addAttributeModifier(Attribute.GENERIC_ATTACK_SPEED, attackSpeedModifier);
+
+            itemMeta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES, ItemFlag.HIDE_ENCHANTS, ItemFlag.HIDE_UNBREAKABLE);
+
+            itemMeta.setUnbreakable(true);
+            itemStack.setItemMeta(itemMeta);
+
+
+            player.getInventory().addItem(itemStack);
+        }
+    }
+
     public void slowness(Player player) {
         PotionEffect slow = new PotionEffect(PotionEffectType.SLOW, 999999 * 20, 10);
         player.addPotionEffect(slow);
@@ -184,12 +357,18 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
     }
 
     public void teamJoin(Player player, String team){
-        String teamJoin = "team join " + player + " " +team;
+        String playerName = player.getName();
+        String teamJoin = "team join " + team + " " + playerName;
         Bukkit.dispatchCommand(Bukkit.getConsoleSender(), teamJoin);
     }
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         Player player = (Player) sender;
+
+        /*if (command.getName().equalsIgnoreCase("test")) {
+            openGUI(player);
+            openWeaponGUI(player);
+        }*/
 
         if (command.getName().equalsIgnoreCase("디버그")) {
             if (player.isOp()) {
@@ -197,6 +376,8 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
                     if (args[0].equalsIgnoreCase("item")){
                         giveToySword(player);
                         givePhantomDance(player);
+                    } else if (args[0].equalsIgnoreCase("boss")) {
+                        Bukkit.broadcastMessage("1");
                     }
 
                 } else if (args.length == 2) {
@@ -220,14 +401,18 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
                         }
                         player.sendMessage("술레 스폰이 " + bossSpawn + "로 저장됨");
                     } else if (args[0].equalsIgnoreCase("플레이어위치")) {
-                        runnerSpawn = player.getLocation();
+                        runnerSpawn.add(player.getLocation());
+                        saveLocations("runnerSpawn", runnerSpawn);
                         try {
                             config.save(configFile);
                         } catch (IOException e) {
                             e.printStackTrace();
                         }
                         player.sendMessage("플레이어 스폰이 " + runnerSpawn + "로 저장됨");
-                    } else if (args[0].equalsIgnoreCase("로비")) {
+                    } else if (args[0].equalsIgnoreCase("플레이어위치초기화")) {
+                        runnerSpawn = new ArrayList<>();
+                    }
+                    else if (args[0].equalsIgnoreCase("로비")) {
                         lobby = player.getLocation();
                         try {
                             config.save(configFile);
@@ -255,33 +440,34 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
                     onlinePlayer.addAll(Bukkit.getOnlinePlayers());
                     for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
                         onlinePlayer.setGameMode(GameMode.ADVENTURE);
+                        onlinePlayer.getInventory().clear();
                         String teamPlayer = onlinePlayer.getName();
                         String teamLeaveCommand = "team leave " + teamPlayer;
-                        player.sendMessage(teamLeaveCommand);
                         Bukkit.dispatchCommand(Bukkit.getConsoleSender(), teamLeaveCommand);
                         onlinePlayer.setMaxHealth(20);
                     }
-                    bossWin = false;
+                    remainNum = 0;
+                    playerWin = false;
                     boss = null;
-                    runner = null;
+                    runner = new ArrayList<>();
                     getRandomPlayer();
                     boss = getRandom();
-                    Bukkit.broadcastMessage("boss is " + boss.getName());
-                    givePhantomDance(boss);
+                    Bukkit.broadcastMessage("술레는 " + boss.getName() + "입니다");
                     slowness(boss);
                     darkness(boss);
-                    String bossName = boss.getName();
+                    bossName = boss.getName();
                     String bossTeamJoin = "team join boss " + bossName;
                     Bukkit.dispatchCommand(Bukkit.getConsoleSender(), bossTeamJoin);
                     boss.setMaxHealth(80);
                     heal(boss);
                     boss.teleport(bossSpawn);
-                    remainNum = 1;
+                    openWeaponGUI(boss);
                     for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
-                        if (!boss.equals(onlinePlayer)) {
+                        if (!onlinePlayer.equals(boss)) {
                             teamJoin(onlinePlayer, "player");
                             runner.add(onlinePlayer);
-                            onlinePlayer.teleport(runnerSpawn);
+                            getRandomLocation();
+                            onlinePlayer.teleport(randomLocation);
                             darkness(onlinePlayer);
                             heal(onlinePlayer);
                             remainNum = remainNum + 1;
@@ -290,18 +476,61 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
                     }
                     t = 10;
                     tt = time;
-                    timestart = false;
+                    timestart = true;
+                    waitFinish = false;
 
                     Bukkit.getScheduler().runTaskTimer(this, () -> {
+
+                        if (timestart && waitFinish) {
+                            clearEffect(boss);
+                            darkness(boss);
+                            Bukkit.broadcastMessage("술레가 풀려남");
+                            timestart = false;
+                        }
                         if (t <= 0) {
-                            Bukkit.getScheduler().cancelTasks(this);
+                            if (tt <= 0) {
+                                playerWin = true;
+                            }
+                            if (tt <= 0 || remainNum <= 0 || playerWin) {
+                                Bukkit.getScheduler().cancelTasks(this);
+                                if (playerWin) {
+                                    Bukkit.broadcastMessage("플레이어가 승리함");
+                                } else {
+                                    Bukkit.broadcastMessage("술레가 승리함");
+                                }
+                                boss.setMaxHealth(20);
+                                boss = null;
+                                runner = new ArrayList<>();
+                                tt = time;
+                                getRandomPlayer();
+                                for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
+                                    onlinePlayer.setGameMode(GameMode.ADVENTURE);
+                                    onlinePlayer.teleport(lobby);
+                                    clearEffect(onlinePlayer);
+                                    onlinePlayer.getInventory().clear();
+                                    String teamPlayer = onlinePlayer.getName();
+                                    String teamLeaveCommand = "team leave " + teamPlayer;
+                                    Bukkit.dispatchCommand(Bukkit.getConsoleSender(), teamLeaveCommand);
+                                    onlinePlayer.setMaxHealth(20);
+                                }
+
+                            }
+                            else {
+                                if (tt == 60){
+                                    Bukkit.broadcastMessage("60초 남았습니다");
+                                } else if (tt <= 5) {
+                                    Bukkit.broadcastMessage(ChatColor.RED+ "" + tt + "초 남았습니다");
+                                }
+                                tt--;
+                                waitFinish = true;
+                            }
                         }
                         else {
                             Bukkit.broadcastMessage("술레가 나오기까지 : " + t);
                             t--;
                         }
                     },0L, 20L);
-                    Bukkit.broadcastMessage("1");
+
 
 
 
@@ -317,6 +546,44 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
         return false;
         }
 
+    @EventHandler
+    public void onPlayerDeath(PlayerDeathEvent event){
+        Player player = event.getEntity();
+        String playerName = player.getName();
+        if (player.equals(boss)) {
+            player.setGameMode(GameMode.SPECTATOR);
+            Bukkit.broadcastMessage("술레 " + playerName + "이/가 쓰러졌습니다!");
+            playerWin = true;
+        } else {
+            player.setGameMode(GameMode.SPECTATOR);
+            remainNum--;
+            Bukkit.broadcastMessage(remainNum + "명 남았습니다");
+
+        }
+    }
+
+    @EventHandler
+    public void onInventoryClick(InventoryClickEvent event) {
+        if (event.getView().getTitle().equals("WeaponGUI")) {
+            event.setCancelled(true);
+
+            ItemStack clickedItem = event.getCurrentItem();
+            if (clickedItem != null && clickedItem.getType() == Material.NETHERITE_HOE) {
+                Player player = (Player) event.getWhoClicked();
+                givePhantomDance(player);
+                player.closeInventory();
+            }
+            if (clickedItem != null && clickedItem.getType() == Material.IRON_AXE) {
+                Player player = (Player) event.getWhoClicked();
+                giveIronAxe(player);
+                player.closeInventory();
+            }
+        }
+    }
+
+
+
+
 
 
     @Override
@@ -327,7 +594,15 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
             if (args.length == 1) {
                 completions.add("술레위치");
                 completions.add("플레이어위치");
+                completions.add("플레이어위치초기화");
                 completions.add("로비");
+                completions.add("time");
+            }
+        }
+
+        if(command.getName().equalsIgnoreCase("디버그")) {
+            if (args.length == 1) {
+                completions.add("item");
             }
         }
         return  completions;
