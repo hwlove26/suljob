@@ -67,9 +67,9 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
         configFile = new File(getDataFolder(), "config.yml");
         config = YamlConfiguration.loadConfiguration(configFile);
         bossSpawn = config.getLocation("bossSpawn");
-        runnerSpawn = loadLocations("runnerSpawn");
         lobby = config.getLocation("lobby");
         time = config.getInt("time");
+        runnerSpawn = loadLocations();
 
     }
     @Override
@@ -78,7 +78,7 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
         config.set("bossSpawn", bossSpawn);
         config.set("lobby", lobby);
         config.set("time", time);
-        saveLocations("runnerSpawn", runnerSpawn);
+        saveLocations();
         try {
             config.save(configFile);
         } catch (IOException e) {
@@ -86,45 +86,50 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
         }
     }
 
-    private void saveLocations(String path, List<Location> locations) {
+    private void saveLocations() {
         FileConfiguration config = getConfig();
-        ConfigurationSection section = config.createSection(path);
+        config.set("locations", null); // Clear the existing locations
 
-        for (int i = 0; i < locations.size(); i++) {
-            Location location = locations.get(i);
+        for (int i = 0; i < runnerSpawn.size(); i++) {
+            Location location = runnerSpawn.get(i);
             String key = "location" + i;
 
-            section.set(key + ".world", location.getWorld().getName());
-            section.set(key + ".x", location.getX());
-            section.set(key + ".y", location.getY());
-            section.set(key + ".z", location.getZ());
-            section.set(key + ".yaw", location.getYaw());
-            section.set(key + ".pitch", location.getPitch());
+            ConfigurationSection section = config.createSection(key);
+            section.set("world", location.getWorld().getName());
+            section.set("x", location.getX());
+            section.set("y", location.getY());
+            section.set("z", location.getZ());
+            section.set("yaw", location.getYaw());
+            section.set("pitch", location.getPitch());
         }
 
         saveConfig();
     }
 
-    private List<Location> loadLocations(String path) {
-        List<Location> locations = new ArrayList<>();
-        ConfigurationSection section = getConfig().getConfigurationSection(path);
+    private List<Location> loadLocations() {
+        List<Location> loadedLocations = new ArrayList<>();
+        ConfigurationSection locationsSection = getConfig().getConfigurationSection("locations");
 
-        if (section != null) {
-            for (String key : section.getKeys(false)) {
-                String worldName = section.getString(key + ".world");
-                double x = section.getDouble(key + ".x");
-                double y = section.getDouble(key + ".y");
-                double z = section.getDouble(key + ".z");
-                float yaw = (float) section.getDouble(key + ".yaw");
-                float pitch = (float) section.getDouble(key + ".pitch");
+        if (locationsSection != null) {
+            for (String key : locationsSection.getKeys(false)) {
+                ConfigurationSection section = locationsSection.getConfigurationSection(key);
 
-                Location location = new Location(getServer().getWorld(worldName), x, y, z, yaw, pitch);
-                locations.add(location);
+                String worldName = section.getString("world");
+                double x = section.getDouble("x");
+                double y = section.getDouble("y");
+                double z = section.getDouble("z");
+                float yaw = (float) section.getDouble("yaw");
+                float pitch = (float) section.getDouble("pitch");
+
+                Location location = new Location(Bukkit.getWorld(worldName), x, y, z, yaw, pitch);
+                loadedLocations.add(location);
             }
         }
 
-        return locations;
+        return loadedLocations;
     }
+
+
     public void getRandomPlayer() {
         if (onlinePlayer.isEmpty()) {
             getLogger().warning("플레이어가 없음");
@@ -335,6 +340,16 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
         }
     }
 
+    public void giveEcho(Player player) {
+        ItemStack itemStack = new ItemStack(Material.ECHO_SHARD);
+        ItemMeta itemMeta = itemStack.getItemMeta();
+
+
+
+        player.getInventory().addItem(itemStack);
+
+    }
+
     public void slowness(Player player) {
         PotionEffect slow = new PotionEffect(PotionEffectType.SLOW, 999999 * 20, 10);
         player.addPotionEffect(slow);
@@ -343,6 +358,11 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
     public void darkness(Player player) {
         PotionEffect dark = new PotionEffect(PotionEffectType.DARKNESS, 99999 * 20, 1);
         player.addPotionEffect(dark);
+    }
+
+    public void nightVision(Player player) {
+        PotionEffect night = new PotionEffect(PotionEffectType.NIGHT_VISION, 999999, 255);
+        player.addPotionEffect(night);
     }
 
     public void heal(Player player) {
@@ -402,7 +422,6 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
                         player.sendMessage("술레 스폰이 " + bossSpawn + "로 저장됨");
                     } else if (args[0].equalsIgnoreCase("플레이어위치")) {
                         runnerSpawn.add(player.getLocation());
-                        saveLocations("runnerSpawn", runnerSpawn);
                         try {
                             config.save(configFile);
                         } catch (IOException e) {
@@ -453,6 +472,7 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
                     getRandomPlayer();
                     boss = getRandom();
                     Bukkit.broadcastMessage("술레는 " + boss.getName() + "입니다");
+                    nightVision(boss);
                     slowness(boss);
                     darkness(boss);
                     bossName = boss.getName();
@@ -461,6 +481,7 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
                     boss.setMaxHealth(80);
                     heal(boss);
                     boss.teleport(bossSpawn);
+                    giveEcho(boss);
                     openWeaponGUI(boss);
                     for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
                         if (!onlinePlayer.equals(boss)) {
@@ -468,12 +489,14 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
                             runner.add(onlinePlayer);
                             getRandomLocation();
                             onlinePlayer.teleport(randomLocation);
+                            nightVision(onlinePlayer);
                             darkness(onlinePlayer);
                             heal(onlinePlayer);
                             remainNum = remainNum + 1;
                             giveToySword(onlinePlayer);
                         }
                     }
+                    Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "scoreboard player set bs2 xy 4");
                     t = 10;
                     tt = time;
                     timestart = true;
@@ -483,6 +506,7 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
 
                         if (timestart && waitFinish) {
                             clearEffect(boss);
+                            nightVision(boss);
                             darkness(boss);
                             Bukkit.broadcastMessage("술레가 풀려남");
                             timestart = false;
