@@ -69,7 +69,7 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
         bossSpawn = config.getLocation("bossSpawn");
         lobby = config.getLocation("lobby");
         time = config.getInt("time");
-        runnerSpawn = loadLocations();
+        loadSavedLocations();
 
     }
     @Override
@@ -78,7 +78,7 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
         config.set("bossSpawn", bossSpawn);
         config.set("lobby", lobby);
         config.set("time", time);
-        saveLocations();
+        saveSavedLocations();
         try {
             config.save(configFile);
         } catch (IOException e) {
@@ -86,47 +86,38 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
         }
     }
 
-    private void saveLocations() {
-        FileConfiguration config = getConfig();
-        config.set("locations", null); // Clear the existing locations
+    private void loadSavedLocations() {
+        runnerSpawn.clear();
 
-        for (int i = 0; i < runnerSpawn.size(); i++) {
-            Location location = runnerSpawn.get(i);
-            String key = "location" + i;
+        ConfigurationSection locationSection = getConfig().getConfigurationSection("savedLocations");
+        if (locationSection != null) {
+            for (String key : locationSection.getKeys(false)) {
+                Object locObject = locationSection.get(key);
 
-            ConfigurationSection section = config.createSection(key);
-            section.set("world", location.getWorld().getName());
-            section.set("x", location.getX());
-            section.set("y", location.getY());
-            section.set("z", location.getZ());
-            section.set("yaw", location.getYaw());
-            section.set("pitch", location.getPitch());
-        }
-
-        saveConfig();
-    }
-
-    private List<Location> loadLocations() {
-        List<Location> loadedLocations = new ArrayList<>();
-        ConfigurationSection locationsSection = getConfig().getConfigurationSection("locations");
-
-        if (locationsSection != null) {
-            for (String key : locationsSection.getKeys(false)) {
-                ConfigurationSection section = locationsSection.getConfigurationSection(key);
-
-                String worldName = section.getString("world");
-                double x = section.getDouble("x");
-                double y = section.getDouble("y");
-                double z = section.getDouble("z");
-                float yaw = (float) section.getDouble("yaw");
-                float pitch = (float) section.getDouble("pitch");
-
-                Location location = new Location(Bukkit.getWorld(worldName), x, y, z, yaw, pitch);
-                loadedLocations.add(location);
+                if (locObject instanceof Location) {
+                    runnerSpawn.add((Location) locObject);
+                } else {
+                    getLogger().warning("Invalid location format in the config: " + key);
+                }
             }
         }
+    }
 
-        return loadedLocations;
+    private void saveSavedLocations() {
+        FileConfiguration config = getConfig();
+        ConfigurationSection locationSection = config.createSection("savedLocations");
+
+        for (int i = 0; i < runnerSpawn.size(); i++) {
+            String key = "location" + i;
+            Location location = runnerSpawn.get(i);
+            locationSection.set(key, location);
+        }
+
+        try {
+            config.save(configFile);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
 
