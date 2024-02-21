@@ -69,7 +69,8 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
         bossSpawn = config.getLocation("bossSpawn");
         lobby = config.getLocation("lobby");
         time = config.getInt("time");
-        loadSavedLocations();
+        loadRunner();
+
 
     }
     @Override
@@ -78,7 +79,7 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
         config.set("bossSpawn", bossSpawn);
         config.set("lobby", lobby);
         config.set("time", time);
-        saveSavedLocations();
+        saveRunner();
         try {
             config.save(configFile);
         } catch (IOException e) {
@@ -86,7 +87,7 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
         }
     }
 
-    private void loadSavedLocations() {
+    private void loadRunner() {
         runnerSpawn.clear();
 
         ConfigurationSection locationSection = getConfig().getConfigurationSection("savedLocations");
@@ -103,22 +104,21 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
         }
     }
 
-    private void saveSavedLocations() {
+    private void saveRunner() {
         FileConfiguration config = getConfig();
         ConfigurationSection locationSection = config.createSection("savedLocations");
 
         for (int i = 0; i < runnerSpawn.size(); i++) {
+            getLogger().warning("" + i);
             String key = "location" + i;
             Location location = runnerSpawn.get(i);
             locationSection.set(key, location);
         }
 
-        try {
-            config.save(configFile);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        saveConfig();
     }
+
+
 
 
     public void getRandomPlayer() {
@@ -413,6 +413,7 @@ public final class Suljob extends JavaPlugin implements Listener,CommandExecutor
                         player.sendMessage("술레 스폰이 " + bossSpawn + "로 저장됨");
                     } else if (args[0].equalsIgnoreCase("플레이어위치")) {
                         runnerSpawn.add(player.getLocation());
+                        saveRunner();
                         try {
                             config.save(configFile);
                         } catch (IOException e) {
